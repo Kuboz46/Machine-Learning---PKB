@@ -1,0 +1,182 @@
+library(xgboost)
+library(caret)
+WMAPE <- function(obs, pred)
+{
+  sum(abs(obs - pred)) / sum(abs(obs))
+}
+
+# Bedziemy dodawac zmienna w sposob sekwencyjny, tzn.:
+# Szukamy 1 zmiennej, dla ktorej mamy najmniejsze RMSE.
+# Dodajemy kolejna zmienna i sprawdzamy, dla ktorej nowej zmiennej mamy najmniejsze RMSE.
+# Itd. do calego zbioru zmiennych.
+
+dane_x <- dane[, -ncol(dane)]
+
+wektor <- rep(0, 103)
+zbior_zmiennych <- c()
+
+wart_PKB <- df_df_kw_PKB[, 3]
+
+
+
+oblicz_CV_dla_zbioru <- function(zbior)
+{
+  wart_RMSE <- rep(0, 5)
+  
+  dane_tren <- dane[1:16, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[17:20, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x[, zbior]), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test[, zbior]))
+  
+  wart_RMSE[1] <- RMSE(wart_PKB[45:48], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:20, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[21:24, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x[, zbior]), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test[, zbior]))
+  wart_RMSE[2] <- RMSE(wart_PKB[49:52], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:24, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[25:28, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x[, zbior]), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test[, zbior]))
+  wart_RMSE[3] <- RMSE(wart_PKB[53:56], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:28, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[29:32, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x[, zbior]), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test[, zbior]))
+  wart_RMSE[4] <- RMSE(wart_PKB[57:60], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:32, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[33:36, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x[, zbior]), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test[, zbior]))
+  wart_RMSE[5] <- RMSE(wart_PKB[61:64], out_test[seq(3, length(out_test), 3)])
+  
+  mean(wart_RMSE)
+}
+
+
+
+
+for(i in 1:103)
+{
+  print(i)
+  
+  pod_wektor <- rep(0, 103 - (i - 1))
+  k <- 1
+  for(j in 1:103)
+  {
+    if (j %in% zbior_zmiennych)
+    {
+      
+    }
+    else
+    {
+      if(k == 1)
+      {
+        idx_min <- j
+      }
+      
+      pod_wektor[k] <- oblicz_CV_dla_zbioru(append(zbior_zmiennych, j))
+      if(pod_wektor[k] < min(pod_wektor[1:(k - 1)]))
+      {
+        idx_min <- j
+      }
+      k <- k + 1
+    }
+  }
+  wektor[i] <- min(pod_wektor)
+  zbior_zmiennych <- append(zbior_zmiennych, idx_min)
+}
+
+# Uwzglednienie tylko liczby zmiennych, do ktorej
+# R zdazyl obliczyc.
+
+
+X11()
+plot(wektor, main = "RMSE a liczba zmiennych (dodawana sekwencyjnie)")
+lines(wektor)
+
+min(wektor)
+# 0.4772582
+
+which(wektor == min(wektor))
+# 18 19 20
+
+
+
+
+max(wektor)
+# 1.361038
+
+which(wektor == max(wektor))
+# 101
+
+
+# Wykresy predykcji
+
+df_sdn_ark_2 <- read.xlsx("sprzedaz_detaliczna_nsa.xlsx", sheet = 2)
+
+daty <- as.Date(df_sdn_ark_2$okres, origin = "1899-12-30")
+daty <- daty[seq(1, length(daty), by = 3)]
+daty <- daty[1:(length(daty) - 2)]
+daty_cale <- as.Date(df_sdn_ark_2$okres, origin = "1899-12-30")
+
+
+
+dane_x <- dane[, -ncol(dane)]
+dtrain <- xgb.DMatrix(data = as.matrix(dane_x[, zbior_zmiennych[1:4]]), label = dane$PKB)
+bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+out <- predict(bstDMatrix, as.matrix(dane_cale[, zbior_zmiennych[1:4]]))
+
+X11()
+plot(daty, wart_PKB[29:length(wart_PKB)], main = paste("RMSE =", RMSE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)]), ", WMAPE =", WMAPE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)])))
+lines(daty, wart_PKB[29:length(wart_PKB)], col = "black")
+points(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+lines(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+
+
+
+
+
+
+
+dane_x <- dane[, -ncol(dane)]
+dtrain <- xgb.DMatrix(data = as.matrix(dane_x[, zbior_zmiennych[1:18]]), label = dane$PKB)
+bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 12, verbose = 0)
+out <- predict(bstDMatrix, as.matrix(dane_cale[, zbior_zmiennych[1:18]]))
+
+X11()
+plot(daty, wart_PKB[29:length(wart_PKB)], main = paste("RMSE =", RMSE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)]), ", WMAPE =", WMAPE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)])))
+lines(daty, wart_PKB[29:length(wart_PKB)], col = "black")
+points(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+lines(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+
+
+
+
+
+# Wykres predykcji i prawdziwych wartosci PKB dla wszystkich zmiennych
+
+dane_x <- dane[, -ncol(dane)]
+dtrain <- xgb.DMatrix(data = as.matrix(dane_x), label = dane$PKB)
+bstDMatrix <- xgboost(data = dtrain, max.depth = 10, eta = 0.783, nthread = 2, nrounds = 16, verbose = 0)
+out <- predict(bstDMatrix, as.matrix(dane_cale))
+
+X11()
+plot(daty, wart_PKB[29:length(wart_PKB)], main = paste("RMSE =", RMSE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)]), ", WMAPE =", WMAPE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)])))
+lines(daty, wart_PKB[29:length(wart_PKB)], col = "black")
+points(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+lines(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
