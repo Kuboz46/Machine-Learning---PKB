@@ -1,0 +1,315 @@
+# Dane twarde
+
+setwd("Z:/Osobiste/Kuba Z/2 problemy - to na pocz?tek")
+
+library(openxlsx)
+library(xts)
+
+# Dane bede trenowal od 2010 do 2019 roku.
+
+dane1 <- read.xlsx("produkcja_budowlano_montazowa.xlsx", sheet = 1, detectDates = T)
+dane1 <- xts(dane1[,-1], order.by = dane1[,1])
+colnames(dane1) <- paste0("Produkcja_budowlano_montazowa_Arkusz", 1, "_", colnames(dane1))
+
+for(i in 2:7)
+{
+  dane1_nowe <- read.xlsx("produkcja_budowlano_montazowa.xlsx", sheet = i, detectDates = T)
+  
+  dane1_nowe <- xts(dane1_nowe[,-1], order.by = dane1_nowe[,1])
+  
+  colnames(dane1_nowe) <- paste0("Produkcja_budowlano_montazowa_Arkusz", i, "_", colnames(dane1_nowe))
+  
+  dane1 <- merge.xts(dane1, dane1_nowe)
+}
+
+
+
+
+
+
+dane2 <- read.xlsx("produkcja_przemyslowa.xlsx", sheet = 1, detectDates = T)
+dane2 <- xts(dane2[,-1], order.by = dane2[,1])
+colnames(dane2) <- paste0("produkcja_przemyslowa_Arkusz", 1, "_", colnames(dane2))
+
+for(i in 2:4)
+{
+  dane2_nowe <- read.xlsx("produkcja_przemyslowa.xlsx", sheet = i, detectDates = T)
+  
+  dane2_nowe <- xts(dane2_nowe[,-1], order.by = dane2_nowe[,1])
+  
+  colnames(dane2_nowe) <- paste0("produkcja_przemyslowa_Arkusz", i, "_", colnames(dane2_nowe))
+  
+  dane2 <- merge.xts(dane2, dane2_nowe)
+}
+
+dane <- merge.xts(dane1, dane2)
+
+
+
+
+
+
+
+dane3 <- read.xlsx("sprzedaz_detaliczna_nsa.xlsx", sheet = 1, detectDates = T)
+dane3 <- xts(dane3[,-1], order.by = dane3[,1])
+colnames(dane3) <- paste0("sprzedaz_detaliczna_nsa_Arkusz", 1, "_", colnames(dane3))
+
+for(i in 2:7)
+{
+  dane3_nowe <- read.xlsx("sprzedaz_detaliczna_nsa.xlsx", sheet = i, detectDates = T)
+  
+  dane3_nowe <- xts(dane3_nowe[,-1], order.by = dane3_nowe[,1])
+  
+  colnames(dane3_nowe) <- paste0("sprzedaz_detaliczna_nsa_Arkusz", i, "_", colnames(dane3_nowe))
+  print(i)
+  dane3 <- merge.xts(dane3, dane3_nowe)
+}
+
+dane <- merge.xts(dane, dane3)
+
+
+
+# Zmienne, dla ktorych mamy wiecej brakow danych niz polowe obserwacji, usuwamy,
+# natomiast dla pozostalych zmiennych z brakami danych, braki danych uzupelniamy
+# srednia z obserwacji bez brakow danych dla odpowiadajacej zmiennej.
+
+wiec_niz_polowa_bd <- c()
+
+for(i in 1:ncol(dane))
+{
+  if(sum(is.na(dane[, i])) > 0.5 * nrow(dane))
+  {
+    wiec_niz_polowa_bd <- append(wiec_niz_polowa_bd, i)
+  }
+}
+
+dane <- dane[, -wiec_niz_polowa_bd]
+
+# Tutaj zapisalem swoje srodowisko
+
+typeof(dane[, 1])
+# "double"
+# Ok
+
+for(i in 1:ncol(dane))
+{
+  if(sum(is.na(dane[, i])) > 0)
+  {
+    idx_na <- which(is.na(dane[, i]))
+    dane[idx_na, i] <- mean(dane[-idx_na, i])
+  }
+}
+
+sum(is.na(dane))
+# 0
+
+# Ok
+
+
+
+# Agregacja danych
+
+dane_cale <- dane
+
+idx_x <- seq(1, 108, by = 3)
+
+dane <- dane[idx_x, ]
+
+for(j in 1:ncol(dane))
+{
+  for(i in 1:nrow(dane))
+  {
+    
+    dane[i, j] <- mean(c(dane_cale[3 * (i - 1) + 1, j], dane_cale[3 * (i - 1) + 2, j], dane_cale[3 * (i - 1) + 3, j]))
+  }
+}
+
+df_df_kw_PKB <- read.xlsx("Z:/Osobiste/Kuba Z/2 problemy - to na pocz?tek/Dane_kwartalne_PKB.xlsx")
+
+df_y <- df_df_kw_PKB[29:64, 3] 
+
+length(df_y)
+
+dane <- cbind(dane, df_y)  
+
+names(dane)[ncol(dane)] <- "PKB"
+
+
+
+
+# Tutaj zapis srodowiska 
+
+
+
+
+
+# Modelowanie
+
+library(xgboost)
+
+wart_PKB <- df_df_kw_PKB[, 3]
+
+df_sdn_ark_2 <- read.xlsx("sprzedaz_detaliczna_nsa.xlsx", sheet = 2)
+
+daty <- as.Date(df_sdn_ark_2$okres, origin = "1899-12-30")
+daty <- daty[seq(1, length(daty), by = 3)]
+daty <- daty[1:(length(daty) - 2)]
+daty_cale <- as.Date(df_sdn_ark_2$okres, origin = "1899-12-30")
+
+# XGBoost dla starych parametrow (dobrane na starym zbiorze)
+dane_x <- dane[, -ncol(dane)]
+dtrain <- xgb.DMatrix(data = as.matrix(dane_x), label = dane$PKB)
+bstDMatrix <- xgboost(data = dtrain, max.depth = 7, eta = 0.698, nthread = 2, nrounds = 14, verbose = 0)
+out <- predict(bstDMatrix, as.matrix(dane_cale))
+
+
+
+
+
+
+
+
+library(caret)
+
+WMAPE <- function(obs, pred)
+{
+  sum(abs(obs - pred)) / sum(abs(obs))
+}
+
+
+
+
+
+
+fit_with_xgboost_line_line <- function(parammaxdepth, parameta, paramnthread, paramnrounds)
+{
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_x), label = dane$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = parammaxdepth, eta = parameta, nthread = paramnthread, nrounds = paramnrounds)
+  out <- predict(bstDMatrix, as.matrix(dane_cale))
+  X11()
+  plot(daty, wart_PKB[29:length(wart_PKB)], main = paste("RMSE =", RMSE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)]), ", WMAPE =", WMAPE(wart_PKB[29:length(wart_PKB)], out[seq(3, length(out) - 3, 3)])))
+  lines(daty, wart_PKB[29:length(wart_PKB)], col = "black")
+  points(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+  lines(daty_cale[c(seq(1, length(daty_cale), 3), length(daty_cale))], out[c(seq(1, length(out), 3), length(out))], col = "blue")
+}  
+
+dane_x <- dane[, -ncol(dane)]
+
+fit_with_xgboost_line_line(7, 0.698, 2, 14)
+
+
+
+
+oblicz_CV <- function(param_max.depth, param_eta, param_nthread, param_nrounds)
+{
+  wart_RMSE <- rep(0, 5)
+  dane_x <- dane[, -ncol(dane)]
+  dane_tren <- dane[1:16, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[17:20, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = param_max.depth, eta = param_eta, nthread = param_nthread, nrounds = param_nrounds, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test))
+  
+  wart_RMSE[1] <- RMSE(wart_PKB[45:48], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:20, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[21:24, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = param_max.depth, eta = param_eta, nthread = param_nthread, nrounds = param_nrounds, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test))
+  wart_RMSE[2] <- RMSE(wart_PKB[49:52], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:24, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[25:28, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = param_max.depth, eta = param_eta, nthread = param_nthread, nrounds = param_nrounds, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test))
+  wart_RMSE[3] <- RMSE(wart_PKB[53:56], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:28, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[29:32, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = param_max.depth, eta = param_eta, nthread = param_nthread, nrounds = param_nrounds, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test))
+  wart_RMSE[4] <- RMSE(wart_PKB[57:60], out_test[seq(3, length(out_test), 3)])
+  
+  dane_tren <- dane[1:32, ]
+  dane_tren_x <- dane_tren[, -ncol(dane_tren)]
+  dane_test <- dane_x[33:36, ]
+  dtrain <- xgb.DMatrix(data = as.matrix(dane_tren_x), label = dane_tren$PKB)
+  bstDMatrix <- xgboost(data = dtrain, max.depth = param_max.depth, eta = param_eta, nthread = param_nthread, nrounds = param_nrounds, verbose = 0)
+  out_test <- predict(bstDMatrix, as.matrix(dane_test))
+  wart_RMSE[5] <- RMSE(wart_PKB[61:64], out_test[seq(3, length(out_test), 3)])
+  
+  mean(wart_RMSE)
+}
+
+
+
+
+
+# Najlepsze maxdepth?
+CV_1 <- rep(0, 20)
+for(i in 1:20)
+{
+  CV_1[i] <- oblicz_CV(i, 0.698, 2, 14)
+}
+
+X11(); plot(CV_1)
+which(CV_1 == min(CV_1))
+# 3
+which(CV_1[10:20] == min(CV_1[10:20]))
+# 1  2  3  4  5  6  7  8  9 10 11
+
+# max.depth = 10
+
+
+
+# Najlepsze nthread?
+CV_2 <- rep(0, 20)
+for(i in 1:20)
+{
+  CV_2[i] <- oblicz_CV(10, 0.698, i, 14)
+}
+X11(); plot(CV_2)
+which(CV_2 == min(CV_2)) # Te same wartosci mamy.
+min(CV_2) # 1.756691
+
+# Wezme wiec nthread = 2.
+
+
+# Najlepsze nrounds?
+CV_3 <- rep(0, 20)
+for(i in 1:20)
+{
+  CV_3[i] <- oblicz_CV(10, 0.698, 2, i)
+}
+X11(); plot(CV_3)
+which(CV_3 == min(CV_3)) # 16
+min(CV_3)
+# 1.75625
+
+
+
+fit_with_xgboost_line_line(10, 0.698, 2, 16)
+
+# A eta?
+CV_4 <- rep(0, 501)
+for(i in 750:1250)
+{
+  if(i %% 10 == 0)
+    print(i)
+  
+  CV_4[i - 749] <- oblicz_CV(10, 0.001 * i, 2, 16)
+}
+X11(); plot(CV_4)
+which(CV_4 == min(CV_4)) # 34
+min(CV_4) # 0.9616974
+
+# 783 * 0.001 = 0.783
+
+fit_with_xgboost_line_line(10, 0.783, 2, 16)
