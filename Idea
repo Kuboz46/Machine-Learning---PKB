@@ -1,0 +1,51 @@
+Klasyczna kroswalidacja generalnie nie sprawdza się w przypadku szeregów czasowych, ale istnieje wersja kroswalidacji dla szeregów czasowych. Jest to
+tzw. "rolling crossvalidation".
+
+Szkic:
+TR - zbiór treningowy
+VAL - zbiór walidacyjny
+TE - zbiór testowy
+
+  [                                             TR                                    ][             TE             ]
+1)[    TR_1     ][   VAL_1   ]
+2)[        TR_2              ][   VAL_2   ]
+3)[                        TR_3           ][   VAL_3     ]
+4)[                       TR_4                           ][    VAL_4    ]
+5)[                                TR_5                                 ][   VAL_5    ]
+                                                                                   
+Wybieramy miarę błędu - ja wybieram RMSE.
+Trenujemy model MOD_1 na zbiorze TR_1 liczymy RMSE na zbiorze VAL_1 dla modelu MOD_1. To RMSE oznaczmy jako RMSE_1.
+Trenujemy model MOD_2 na zbiorze TR_2 liczymy RMSE na zbiorze VAL_2 dla modelu MOD_2. To RMSE oznaczmy jako RMSE_2.
+Trenujemy model MOD_3 na zbiorze TR_3 liczymy RMSE na zbiorze VAL_3 dla modelu MOD_3. To RMSE oznaczmy jako RMSE_3.
+Trenujemy model MOD_4 na zbiorze TR_4 liczymy RMSE na zbiorze VAL_4 dla modelu MOD_4. To RMSE oznaczmy jako RMSE_4.
+Trenujemy model MOD_5 na zbiorze TR_5 liczymy RMSE na zbiorze VAL_5 dla modelu MOD_5. To RMSE oznaczmy jako RMSE_5.
+
+Liczymy wartość CV, jest to średnia z wszystkich uzyskanych RMSE, czyli:
+CV = (RMSE_1 + RMSE_2 + RMSE_3 + RMSE_4 + RMSE_5)/5.
+
+Czyli, mam pomysł następujący:
+Szukam parametrów pętlami, tzn.:
+Dla ustalonych wartości parametrów, robię to całą prodedurę, liczę te wszystkie RMSE, a potem wyliczam CV. I jak policzę CV dla wszystkich parametrów, to 
+wybieram takie wartości parametrów, dla których wartość CV jest najmniejsza.
+
+I jak znajdę te parametry, to dla znalezionych parametrów, trenuję model na zbiorze TR i robię predykcje na zbiorze testowym i na ich podstawie, oceniam,
+jak dobrze wypadł mój dobrany model.
+
+Wybieram taki podział:
+Dane twarde oraz mix z danych twardych i danych koniunkturalnych
+[2010                    -             2013][2014]
+[2010                       -                2014][2015]
+[2010                         -                    2015][2016]
+[2010                           -                        2016][2017]
+[2010                             -                            2017][2018]
+
+A potem robię predykcje na całości i oceniam, jak dobry jest model i czy lepiej wypada od poprzednich.
+
+Dane koniunkturalne (tu inaczej, bo mamy jeszcze dane z lat 2003-2009)
+[2003                    -             2007][2008 - 2009]
+[2010                       -                       2009][2010 - 2011]
+[2010                         -                                  2011][2012 - 2013]
+[2010                           -                                             2013][2014 - 2016]
+[2010                             -                                                        2016][2017 - 2018]
+
+I na koniec, predykcja na całości i ocena modelu.
